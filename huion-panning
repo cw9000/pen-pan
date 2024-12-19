@@ -1,0 +1,117 @@
+#!/bin/bash
+SUB=80
+ADD=80
+DESKTOP_WIDTH=3840
+DESKTOP_HEIGHT=2160
+TABLET_WIDTH=1920
+TABLET_HEIGHT=1080
+SCALE_X=$(echo "$TABLET_WIDTH / $DESKTOP_WIDTH" | bc -l)
+SCALE_Y=$(echo "$TABLET_HEIGHT / $DESKTOP_HEIGHT" | bc -l)
+CORRECTIONH=2
+CORRECTIONL=2
+X_HIGHEST=$(( $TABLET_WIDTH - $CORRECTIONH ))
+X_LOWEST=$CORRECTIONL
+Y_HIGHEST=$(( $TABLET_HEIGHT - $CORRECTIONH ))
+Y_LOWEST=$CORRECTIONL
+C_DESKTOP_WIDTH_H=$(( $DESKTOP_WIDTH - $CORRECTIONH ))
+C_DESKTOP_WIDTH_L=$CORRECTIONL
+C_DESKTOP_LX=$(( $C_DESKTOP_WIDTH_H - $TABLET_WIDTH ))
+C_DESKTOP_HX=$(( $C_DESKTOP_WIDTH_L + $TABLET_WIDTH ))
+C_DESKTOP_HEIGHT_H=$(( $DESKTOP_HEIGHT - $CORRECTIONH ))
+C_DESKTOP_HEIGHT_L=$CORRECTIONL
+C_DESKTOP_LY=$(( $C_DESKTOP_HEIGHT_H - $TABLET_HEIGHT ))
+C_DESKTOP_HY=$(( $C_DESKTOP_HEIGHT_L + $TABLET_HEIGHT ))
+
+xrandr --output HDMI-2 --same-as DP-1 --panning 3840x2160+0+0
+sleep 10
+xinput set-prop 'HUION 256C PEN STYLUS Pen (0)' "libinput Left Handed Enabled" 0
+
+xdotool mousemove 0 0
+xinput set-prop 'HUION 256C PEN STYLUS Pen (0)' "Coordinate Transformation Matrix" $SCALE_X 0 0  0 $SCALE_Y 0  0 0 1
+#count=0
+while [[ 1 == 1 ]]; do
+# Get the current mouse position
+MOUSE_POS=$(xdotool getmouselocation --shell)
+
+X=$(echo "$MOUSE_POS" | grep -oP 'X=\K[0-9]+')
+Y=$(echo "$MOUSE_POS" | grep -oP 'Y=\K[0-9]+')
+#if [[ $count == 20 ]];then
+#    echo "X: $X   Y: $Y" 
+#    count=0
+#fi
+#count=$(( $count + 1 ))
+if ([[ $X -ge $X_HIGHEST ]] && [[ $X -lt $DESKTOP_WIDTH ]]) || ([[ $X -le $X_LOWEST ]] && [[ $X -gt 0 ]]) || ([[ $Y -ge $Y_HIGHEST ]] && [[ $Y -lt $DESKTOP_HEIGHT ]]) || ([[ $Y -le $Y_LOWEST ]] && [[ $Y -gt 0 ]]);then
+#echo "X: $X  Y: $Y  X_LOW: $X_LOWEST   X_HIGH: $X_HIGHEST   Y_LOW: $Y_LOWEST  Y_HIGH: $Y_HIGHEST"
+skip="false"
+SUBX=$(( $X - $SUB ))
+SUBY=$(( $Y - $SUB ))
+ADDX=$(( $X + $ADD ))
+ADDY=$(( $Y + $ADD ))
+LOWADDX=$(( $X_LOWEST + $ADD - $CORRECTIONL ))
+LOWADDY=$(( $Y_LOWEST + $ADD - $CORRECTIONL ))
+HIGHSUBX=$(( $X_HIGHEST - $SUB + $CORRECTIONH ))
+HIGHSUBY=$(( $Y_HIGHEST - $SUB + $CORRECTIONH ))
+
+SUBX_F=$(( $SUBX < 0 ? 0 : $SUBX ))
+SUBY_F=$(( $SUBY < 0 ? 0 : $SUBY ))
+ADDX_F=$(( $ADDX > $DESKTOP_WIDTH ? $DESKTOP_WIDTH : $ADDX ))
+ADDY_F=$(( $ADDY > $DESKTOP_HEIGHT ? $DESKTOP_HEIGHT : $ADDY ))
+
+CSUBX=$(( $SUBX_F + $CORRECTIONL ))
+CSUBY=$(( $SUBY_F + $CORRECTIONL ))
+CADDX=$(( $ADDX_F - $CORRECTIONH ))
+CADDY=$(( $ADDY_F - $CORRECTIONH ))
+
+
+C_X_LOWEST=$(( $CSUBX <= $C_DESKTOP_WIDTH_L ? $C_DESKTOP_WIDTH_L : $CSUBX ))
+C_Y_LOWEST=$(( $CSUBY <= $C_DESKTOP_HEIGHT_L ? $C_DESKTOP_HEIGHT_L : $CSUBY ))
+C_X_HIGHEST=$(( $CADDX >= $C_DESKTOP_WIDTH_H ? $C_DESKTOP_WIDTH_H : $CADDX ))
+C_Y_HIGHEST=$(( $CADDY >= $C_DESKTOP_HEIGHT_H ? $C_DESKTOP_HEIGHT_H : $CADDY ))
+
+CLOWADDX=$(( $C_X_HIGHEST - $TABLET_WIDTH + $CORRECTIONL + $CORRECTIONH ))
+CLOWADDY=$(( $C_Y_HIGHEST - $TABLET_HEIGHT + $CORRECTIONL + $CORRECTIONH ))
+CHIGHSUBX=$(( $C_X_LOWEST + $TABLET_WIDTH - $CORRECTIONH - $CORRECTIONL ))
+CHIGHSUBY=$(( $C_Y_LOWEST + $TABLET_HEIGHT - $CORRECTIONH - $CORRECTIONL ))
+
+
+
+    if [[ $X -le $X_LOWEST ]];then
+        xdotool mousemove $SUBX_F $Y
+        skip="true"
+        X_LOWEST=$C_X_LOWEST
+        X_HIGHEST=$CHIGHSUBX
+    fi
+    if [[ $Y -le $Y_LOWEST ]];then
+        xdotool mousemove $X $SUBY_F
+        skip="true"
+        Y_LOWEST=$C_Y_LOWEST
+        Y_HIGHEST=$CHIGHSUBY
+    fi
+    if [[ $X -ge $X_HIGHEST ]];then
+        xdotool mousemove $ADDX_F $Y
+        skip="true"
+        X_HIGHEST=$C_X_HIGHEST
+        X_LOWEST=$CLOWADDX
+    fi
+    if [[ $Y -ge $Y_HIGHEST ]];then
+        xdotool mousemove $X $ADDY_F
+        skip="true"
+        Y_HIGHEST=$C_Y_HIGHEST
+        Y_LOWEST=$CLOWADDY
+    fi
+   
+
+# Define desktop dimensions and tablet resolution
+
+# Calculate panning offsets as fractions
+X_OFFSET=$(echo "$X_LOWEST / $DESKTOP_WIDTH" | bc -l)
+Y_OFFSET=$(echo "$Y_LOWEST / $DESKTOP_HEIGHT" | bc -l)
+
+# Calculate scaling factors
+
+# Apply Coordinate Transformation Matrix
+xinput set-prop 'HUION 256C PEN STYLUS Pen (0)' "Coordinate Transformation Matrix" $SCALE_X 0 $X_OFFSET  0 $SCALE_Y $Y_OFFSET  0 0 1
+xinput list-props 'HUION 256C PEN STYLUS Pen (0)' | grep -oP "Coordinate Transformation Matrix\K.*" > /dev/null 2>&1
+#echo "X: $X  Y: $Y  X_LOW: $X_LOWEST   X_HIGH: $X_HIGHEST   Y_LOW: $Y_LOWEST  Y_HIGH: $Y_HIGHEST"
+fi
+done
